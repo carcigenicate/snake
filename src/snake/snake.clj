@@ -1,10 +1,10 @@
 (ns snake.snake
   (:require [helpers.point-helpers :as ph]))
 
-(defrecord Snake [body])
+(defrecord Snake [body direction])
 
 (defn new-snake [starting-position]
-  (->Snake [starting-position]))
+  (->Snake [starting-position] [0 0]))
 
 (defn feed-at [snake food-position]
   (update snake :body
@@ -16,27 +16,24 @@
           #(let [rem-body (subvec % 0 (dec (count %)))]
              (vec (cons head-position rem-body)))))
 
-; TODO: Doesn't maintain body order. How to know where the head is?
-#_
-(defn move-tail-to [snake head-position]
-  (update snake :body
-          #(assoc % (dec (count %)) head-position)))
+(defn- change-direction [snake offset-point]
+  (assoc snake :direction offset-point))
 
-(defn- move-by [snake offset-point]
-  (let [{body :body} snake
+(defn update-snake-position [snake]
+  (let [{body :body direction :direction} snake
         head (first body)]
 
     (move-tail-to snake
-      (ph/add-pts head offset-point))))
+                  (ph/add-pts head direction))))
 
 (defn move-up [snake]
-  (move-by snake [0 -1]))
+  (change-direction snake [0 -1]))
 
 (defn move-down [snake]
-  (move-by snake [0 1]))
+  (change-direction snake [0 1]))
 
 (defn move-left [snake]
-  (move-by snake [-1 0]))
+  (change-direction snake [-1 0]))
 
 (defn move-right [snake]
-  (move-by snake [1 0]))
+  (change-direction snake [1 0]))
