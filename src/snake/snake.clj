@@ -26,6 +26,11 @@
     (move-tail-to snake
                   (ph/add-pts head direction))))
 
+(defn internal-collision? [snake]
+  (let [{body :body} snake]
+    (not= (count body)
+          (count (set body)))))
+
 (defn move-up [snake]
   (change-direction snake [0 -1]))
 
