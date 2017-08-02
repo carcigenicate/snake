@@ -16,18 +16,22 @@
 (def screen-width 1000)
 (def screen-height 1000)
 
-(def board-width 50)
-(def board-height 50)
+(def board-width 20)
+(def board-height 20)
 
 (def grid-width (/ screen-width board-width))
 (def grid-height (/ screen-height board-height))
 
+(def text-color [255 255 255])
 (def background-color [100 100 100])
 (def snake-color [10 255 10])
 (def food-color [255 10 10])
 
+(def text-size 100)
+(def text-location [(/ screen-width 2) text-size])
+
 (def fps 30) ; TODO: Make this all a function, and check the real frame rate?
-(def update-movement-every 0.001) ; seconds
+(def update-movement-every 0.01) ; seconds
 (def update-movement-every-frames (* fps update-movement-every))
 
 (def global-rand-gen (g/new-rand-gen 99))
@@ -45,6 +49,21 @@
                           i/handle-input
                           state))
 
+(defn random-board-point [rand-gen]
+  (mapv int
+        (ph/random-point 0 board-width
+                         0 board-height
+                         rand-gen)))
+
+(defn spawn-new-food [state rand-gen]
+  (assoc state :food (random-board-point rand-gen)))
+
+(defn new-state [rand-gen]
+  (let [snake (s/new-snake [(/ board-width 2) (/ board-height 2)])]
+    (->State snake
+             (random-board-point global-rand-gen)
+             (km/new-key-manager))))
+
 (defn update-movement? []
   (zero? (rem (q/frame-count) update-movement-every-frames)))
 
@@ -52,6 +71,37 @@
   (if (update-movement?)
     (update state :snake s/update-snake-position)
     state))
+
+(defn score [state]
+  (-> state :snake :body count))
+
+(defn board-point-inbounds? [x y]
+  (and (<= 0 x board-width)
+       (<= 0 y board-height)))
+
+(defn snake-inbounds? [state]
+  (let [{snake :snake} state
+        {body :body} snake
+        [hx hy] (first body)]
+
+    (board-point-inbounds? hx hy)))
+
+(defn game-over? [state]
+  (or (not (snake-inbounds? state))
+      (s/internal-collision? (:snake state))))
+
+(defn draw-text-centered-on [text x y]
+  (let [n-letters (count text)
+        ; Not sure why 1/4 offset adjustment is needed.
+        ;  Would have thought 1/2 would be better.
+        offset (* n-letters text-size 0.25)]
+
+    (q/text text
+            (- x offset) y)))
+
+(defn draw-score [state x y]
+  (draw-text-centered-on (str (score state))
+                         x y))
 
 (defn draw-body-section [[x y]]
   (q/rect x y grid-width grid-height))
@@ -64,29 +114,54 @@
       (doseq [section mapped-body]
         (draw-body-section section)))))
 
-(defn random-snake [n-parts rand-gen]
-  (let [body (for [_ (range n-parts)]
-               (ph/random-point 0 board-width
-                                0 board-height
-                                rand-gen))]
-    (s/->Snake (vec body) [0 0])))
+(defn draw-food [state]
+  (let [{food :food} state
+        [fx fy] (board-coord-to-screen food)]
+    (q/with-fill food-color
+      (q/rect fx fy grid-width grid-height))))
+
+(defn handle-game-over [state]
+  (when (game-over? state)
+    (println "Game Over! Score:" (score state))
+    #_(q/exit))
+
+  state)
+
+(defn handle-eating-food [state rand-gen]
+  (let [{food :food, snake :snake} state
+        {body :body} snake
+        head (first body)]
+
+    (if (= food head)
+      (-> state
+          (update :snake #(s/feed-at % head))
+          (spawn-new-food rand-gen))
+
+      state)))
 
 (defn setup-state []
   (q/frame-rate fps)
 
-  (let [snake (random-snake 100 global-rand-gen)]
-    (->State snake [] (km/new-key-manager))))
+  (q/text-font (q/create-font "Arial" text-size))
+
+  (new-state global-rand-gen))
 
 (defn update-state [state]
   (-> state
+      (handle-game-over)
       (run-key-presses)
-      (update-movement-if-appropriate)))
+      (update-movement-if-appropriate)
+      (handle-eating-food global-rand-gen)))
 
 (defn draw-state [state]
   (apply q/background background-color)
 
   (let [{snake :snake} state]
-    (draw-snake snake)))
+    (draw-snake snake))
+
+  (draw-food state)
+
+  (apply draw-score state text-location))
 
 (defn key-press-handler
   [state event]
